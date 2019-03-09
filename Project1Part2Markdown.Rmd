@@ -1,0 +1,718 @@
+---
+title: "Project1 Part2"
+author: "Tess Newkold"
+date: "2/17/2019"
+output: word_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+*Part 1 - code and output not shown*
+```{r part 1, message=FALSE, results='hide', include = FALSE, warning = FALSE}
+
+# Packages ----------------------------------------------------------------
+library(readxl)
+library(dplyr)
+library(plotly)
+library(ggplot2)
+library(fastDummies)
+library(PerformanceAnalytics)
+library(MASS) #to perform AIC function
+
+# Part 1 Part 1 Questions 1-9 ---------------------------------------------
+# Initial Exploration of the Data
+# Step 1 ------------------------------------------------------------------
+FAA1 <- read_excel("/Users/Tess/Documents/Tess/Ohio/UniversityOfCincinnati/BuisnessAnalytics/Spring2019/StatisticalModeling/Week1/FAA1.xls")
+FAA2 <- read_excel("/Users/Tess/Documents/Tess/Ohio/UniversityOfCincinnati/BuisnessAnalytics/Spring2019/StatisticalModeling/Week1/FAA2.xls")
+
+# Step 2 ------------------------------------------------------------------
+str(FAA1)
+str(FAA2)
+
+# Step 3 ------------------------------------------------------------------
+#combinedTEST <- merge(FAA1, FAA2, all.x = TRUE, all.y = TRUE)
+combinedFAA <- merge(FAA1, FAA2, all = TRUE)
+combinedFAA[duplicated(combinedFAA$speed_ground),]
+
+# Step 4 ------------------------------------------------------------------
+str(combinedFAA)
+summary(combinedFAA)
+sd(combinedFAA$no_pasg)
+sd(combinedFAA$speed_ground)
+sd(combinedFAA$speed_air, na.rm = TRUE)
+sd(combinedFAA$height)
+sd(combinedFAA$pitch)
+sd(combinedFAA$distance)
+sd(combinedFAA$duration, na.rm = TRUE)
+
+
+# Step 5 ------------------------------------------------------------------
+# Step 5. 
+# •	There are 850 observations and 8 variables in the combined data set.
+# •	There are a significant number of missing values in the Speed_Air variable, there are a few in duration, the rest do not have any missing.
+# •	Some of the variables look a little messy, but they will be cleaned up in further steps
+
+# Data Cleaning and Further Exploration -----------------------------------
+
+# Step 6 ------------------------------------------------------------------
+filterFAA <- filter(combinedFAA, duration > 40 | is.na(duration))
+filterFAA1 <- filter(filterFAA, speed_ground >= 30 & speed_ground <= 140 | is.na(speed_ground))
+filterFAA2 <- filter(filterFAA1, speed_air >= 30 & speed_air <= 140 | is.na(speed_air))
+filterFAA3 <- filter(filterFAA2, height > 6 | is.na(height))
+cleanFAA <- filter(filterFAA3, distance < 6000 | is.na(distance))
+
+# Step 7 ------------------------------------------------------------------
+str(cleanFAA)
+summary(cleanFAA)
+sd(cleanFAA$no_pasg)
+sd(cleanFAA$speed_ground)
+sd(cleanFAA$speed_air, na.rm = TRUE)
+sd(cleanFAA$height)
+sd(cleanFAA$pitch)
+sd(cleanFAA$distance)
+sd(cleanFAA$duration, na.rm = TRUE)
+
+# Step 8 ------------------------------------------------------------------
+hist(cleanFAA$no_pasg, main = " ", xlab = "number of passengers", col = "blue")
+hist(cleanFAA$speed_ground, main = " ", xlab = "speed on ground", col = "blue")
+hist(cleanFAA$speed_air, main = " ", xlab = "speed in air", col = "blue")
+hist(cleanFAA$height, main = " ", xlab = "height", col = "blue")
+hist(cleanFAA$pitch, main = " ", xlab = "pitch", col = "blue")
+hist(cleanFAA$distance, main = " ", xlab = "distance", col = "blue")
+hist(cleanFAA$duration, main = " ", xlab = "duration", col = "blue")
+
+
+# Step 9 ------------------------------------------------------------------
+# •	67 observations were removed resulting in a clean data set of 783 observations and 8 variables 
+# •	High percentage of missing variables in Speed in Air variable 
+# •	Histograms look good with speed_in_air and distance being skewed to the right.
+# •	Standard deviation of variables looks high, so will probably want to standardize variables for the model
+```
+
+## Create Binary Responses
+
+### Step 1
+
+```{r step 1, warning = FALSE}
+#creating binary variables for longLanding and riskyLanding
+cleanFAA$longLanding <- ifelse(cleanFAA$distance > 2500, 1, 0)
+cleanFAA$riskyLanding <- ifelse(cleanFAA$distance > 3000, 1, 0)
+
+#get rid of the distance column
+FAA <- subset(cleanFAA, select = -c(distance))
+
+```
+
+**Conclusion:** Two new columns were created, 'longLanding' for landing distances longer than 2500 feet, and 'riskyLanding' for landings longer than 3000 feet. The continous column 'distance' was then discarded. We will now only use the new binary columns for analysis.
+
+## Identify Importnat Factors Using the Binary Data of longLanding
+
+### Step 2
+
+```{r step2, warning = FALSE}
+#histogram showing distribution of long landings 
+hist(FAA$longLanding, main = "Distribution of Long Landings", col = 'blue', xlab = ' ')
+pct <- round(table(FAA$longLanding) / length(FAA$longLanding) * 100, 1)
+labs <- c("All Other Landings", "Long Landings")
+labs <- paste(labs, pct)
+labs <- paste(labs, "%", sep = " ")
+pie(table(FAA$longLanding), labels = labs, col = rainbow(length(labs)), main = "Pie Chart of Long Landings")
+
+```
+
+**Conclusion:** There are by far more landing that are not long. However, 12.4% of landings being long is quite high, so it is very important to evaluate. You can see this in both the histogram and the pie chart above.
+
+
+### Step 3
+
+```{r step3, results='hide', warning = FALSE}
+#model for no-pasg
+modelNoPasgB <- glm(FAA$longLanding ~ FAA$no_pasg, family = binomial)
+summary(modelNoPasgB)
+#model for speed on ground
+modelSpeedOnGroundB <- glm(FAA$longLanding ~ FAA$speed_ground, family = binomial)
+summary(modelSpeedOnGroundB)
+#model for speed in air
+modelSpeedInAirB <- glm(FAA$longLanding ~ FAA$speed_air, family = binomial)
+summary(modelSpeedInAirB)
+#model for height
+modelHeightB <- glm(FAA$longLanding ~ FAA$height,family = binomial)
+summary(modelHeightB)
+#model for pitch
+modelPitchB <- glm(FAA$longLanding ~ FAA$pitch, family = binomial)
+summary(modelPitchB)
+#make dummy variable for aircraft Airbus = 0, Boeing = 1
+dummy <- as.numeric(FAA$aircraft == "airbus", 0, 1)
+#model for aircraft
+modelAircraftB <- lm(FAA$longLanding ~ dummy, data = FAA)
+summary(modelAircraftB)
+```
+
+
+```{r step3 sample, warning = FALSE}
+#model for duration
+modelDurationB <- lm(FAA$longLanding ~ duration, data = FAA)
+summary(modelDurationB)
+
+#Sample output for all variables 
+```
+
+Calculating the odds ratio
+```{r step3 logRatio, results='hide', warning = FALSE}
+exp(modelNoPasgB$coefficients)
+exp(modelSpeedOnGroundB$coefficients)
+exp(modelSpeedInAirB$coefficients)
+exp(modelHeightB$coefficients)
+exp(modelPitchB$coefficients)
+exp(modelDurationB$coefficients)
+```
+
+```{r step 3 logRatio sample, warning = FALSE}
+exp(modelAircraftB$coefficients)
+#Sample output for all variables 
+```
+
+**Table that Ranks the factors from most important to the least**
+
+Table 1.
+
+| Rank | Variable | Regression Coefficient | Odd Ratio | Direction of Regression Coefficient | p-value |
+|:----:|:--------:|:----------------------:|:---------:|:-----------------------------------:|:-------:|
+| 1 | Speed On Ground | 0.47235 | 1.603752 | + | 3.94e-14 |
+| 2 | Speed In Air | 0.51232 | 1.669162 | + | 4.33e-11 |
+| 3 | Aircraft | -0.09205 | 0.9120636 | - | 5.57e-05 |
+| 4 | Pitch | 0.4005 | 1.49261233   | + | 0.0466  |
+| 5 | Height | 0.008624 | 1.0086613 | + | 0.422     |
+| 6 | Number of Passengers | -0.007256 | 0.9927699 | - | 0.6059 |
+| 7 | Duration | -0.0001190 | 0.999881  | - | 0.630979 |
+
+
+
+**Conclusion:** From the information above it appears that speed on ground is the most important factor in having a long landing. Followed by Speed In Air, Aircraft, and Pitch with the rest not looking significant. 
+
+
+### Step 4
+
+```{r step4 speed_ground, message=FALSE, warning = FALSE}
+plot(jitter(longLanding,0.1)~jitter(speed_ground), FAA, xlab="Speed On Ground", ylab = "Long Landing", pch = ".")
+
+ggplot(FAA, aes(x = speed_ground, fill = longLanding)) + geom_histogram(position = "dodge",binwidth = 1) +
+  facet_grid(~longLanding)
+```
+
+**Observations:** From the above graphs for 'Speed On Ground' you can see that there is a pattern between Long Landing and Speed on Ground. Most of the flights that had long landings were going at a faster speed on ground than their counterparts. Also, the distribution of speed on ground is realatively normal. 
+
+
+```{r step4 speed_air, message=FALSE, warning = FALSE}
+plot(jitter(longLanding, 0.1)~jitter(speed_air), FAA, xlab = "Speed In Air", ylab = "Long Landing", pch = ".")
+
+ggplot(FAA, aes(x = speed_air, fill = longLanding)) + geom_histogram(position = "dodge",binwidth = 1) +
+  facet_grid(~longLanding)
+```
+
+**Observations:** You can see that there is a pattern between Long Landing and Speed in Air. Most of the flights that had long landings were going at a faster speed on air than their counterparts, however there still are some flights that are going slower that are still going over the runway. Also, the distribution of speed on ground is realatively normal.
+
+
+```{r step4 aircraft, message=FALSE, warning = FALSE}
+plot(jitter(longLanding, 0.1)~jitter(dummy), FAA, xlab = "Aircraft", ylab = "Long Landing", pch = ".")
+
+ggplot(FAA, aes(x = longLanding, fill = aircraft)) +
+  geom_bar(position = "dodge", width = 0.5) +
+  facet_grid(~aircraft)
+```
+
+**Observations:** You can see that there are more flights proportionally that have long landings in the Boeing aircrafts than Airbus. 
+
+
+```{r step4 pitch, message=FALSE, warning = FALSE}
+plot(jitter(longLanding, 0.1)~jitter(pitch), FAA, xlab = "Pitch", ylab = "Long Landing", pch = ".")
+
+ggplot(FAA,aes(x=pitch,fill=longLanding))+geom_histogram(position="dodge",binwidth=0.5) +
+  facet_grid(~longLanding)
+```
+
+**Observations: **You can see that the distribution is normal, and that most landings happen at a pitch of 4 regardless if they are long or not.
+
+
+### Step 5
+
+```{r step5 proposed model, message=FALSE, warning = FALSE}
+plot(FAA$speed_ground, FAA$speed_air)
+
+proposedModelLong <- glm(longLanding ~ speed_ground + aircraft + pitch, data = FAA, family = binomial(link = "logit"))
+summary(proposedModelLong)
+exp(coef(proposedModelLong))
+```
+
+```{r step 5 empty and full model, message=FALSE, warning = FALSE, results='hide'}
+#making full and empty model for later steps
+fullFAA_omitNA <- na.omit(FAA)
+fullModel <- glm(longLanding ~ aircraft + no_pasg + speed_ground + speed_air + 
+                   height + pitch + duration, data = fullFAA_omitNA, family = binomial(link = "logit"))
+summary(fullModel)
+
+emptyModel <- glm(longLanding ~ 1, data = fullFAA_omitNA, family = binomial(link = "logit"))
+summary(emptyModel)
+
+```
+
+**Conclusions:** Because the variables speed in air and speed on ground are highly correlated to each other, one can and should be eliminated. If you run models with the two variables on their own and then together, you see that the speed in air variable does not change much at all. Where the speed on ground variable does change. Because of this, I am going to proceed with speed on ground instead of speed in air. Another reason to proceed with Speed on Ground, is because there is a large percentage of flights with missing information from the speed in air column, so making a model with a variable with a lot of missing values could skew the model innapropriately. For this reason, I am leaving Speed in Air out of the model, and Speed on Ground in the proposed model. Aircraft and pitch are inlcuded because they are statistically significant on their own (seen in Table 1). The results of the new model can been seen below in Table 2. While Speed on Ground and aircraft are significant, pitch is not significant at alpha=0.05 but it is at alpha=0.10. For now I am going to include pitch in the model. 
+
+Table 2. 
+
+| Rank | Variable | Regression Coefficient | Odd Ratio | Direction of Regression Coefficient | p-value |
+|:----:|:--------:|:----------------------:|:---------:|:-----------------------------------:|:-------:|
+| 1 | Speed On Ground | 0.61471 | 1.849116 | + | 2.18e-11 |
+| 2 | Aircraft | 3.04348 | 20.97815 | + | 3.33e-05 |
+| 3 | Pitch | 1.06599 | 2.903703  | + | 0.0775  |
+
+
+### Step 6
+
+```{r step6 AICStepModel, message=FALSE, warning=FALSE}
+stepAICModel <- step(proposedModelLong, trace = 0)
+summary(stepAICModel)
+exp(coef(stepAICModel))
+```
+
+**Conclusions:** My best model from above (question 5) using the Step AIC function includes variables Aircraft, Speed on Ground, and Pitch. This matches what I predicted from step 3. The results are the exact same as above in Table 2. 
+
+
+### Step 7
+
+```{r step7 BICStepModel, message=FALSE, warning=FALSE}
+stepBICModel <- step(proposedModelLong, k = log(195), trace = 0)
+stepBICModel
+exp(coef(stepBICModel))
+```
+
+**Conclusions:** My best model using the Step BIC function includes variables Aircraft and Speed on Ground. This is partly what I predicted in step 3, but the BIC step variable selection left out pitch, because the BIC penalizes a more complex model, and choose a more simple model. The results of the model are shown below in Table 3.
+
+Table 3. 
+
+| Rank | Variable | Regression Coefficient | Odd Ratio |
+|:----:|:--------:|:----------------------:|:---------:|
+| 1 | Speed On Ground |  0.5853  | 1.795600 |
+| 1 | AircraftBoeing |  3.2368  | 25.45195 |
+
+### Step 8
+
+In my opinion, the major risk factors for long landings are the Speed On Ground and the make of the aircraft, with Boeing being more likely to have long landings.  
+
+**My Model:** longLanding = speed_ground + aircraft 
+
+This is backed up by a combination of information:  
+1. The percent of Long Landings is about 12%, which is a significant amount of landings that are getting close to being dangerous.
+2. The significance of each variable from AIC model selection is significant (except pitch), shown in the table below.  
+3. The following visualization of the speed on ground variable, you can see the aircrafts that are traveling at a higher speed on ground have more long landing distances.  
+4. I am choosing to leave pitch out of the model because it is not significant at alpha=0.05 and the BIC model selection choose to leave it out to favor a more simple model. I think this is the correct move as well. The summary results of my proposed model are below in Table 4.
+
+Table 4. 
+
+| Rank | Variable | Regression Coefficient | Odd Ratio | Direction of Regression Coefficient | p-value |
+|:----:|:--------:|:----------------------:|:---------:|:-----------------------------------:|:-------:|
+| 1 | Speed On Ground | 0.58534 | 1.795600 | + | 4.08e-12 |
+| 2 | Aircraft | 3.23679 | 25.45195 | + | 5.45e-06 |
+
+5. A visual of speed on ground is shown in the graph below as well so you can see that the planes going at higher speeds tend to have long landings, which is backup up statisitically as well.
+
+```{r step8 speed_air visual, warning = FALSE, message=FALSE, echo=FALSE }
+ggplot(FAA, aes(x = speed_ground, fill = longLanding)) + geom_histogram(position = "dodge",binwidth = 1) +
+  facet_grid(~longLanding)
+```
+
+## Identify Importnat Factors Using the Binary Data of Risky Landings
+
+### Step 9
+
+```{r step9-2, warning = FALSE}
+hist(FAA$riskyLanding, main = "Distribution of Risky Landings", col = 'red', xlab = ' ')
+pct <- round(table(FAA$riskyLanding) / length(FAA$riskyLanding) * 100, 1)
+labs <- c("All Other Landings", "Risky Landings")
+labs <- paste(labs, pct)
+labs <- paste(labs, "%", sep = " ")
+pie(table(FAA$riskyLanding), labels = labs, col = rainbow(length(labs)), main = "Pie Chart of Risky Landings")
+```
+
+**Conclusion:** There are by far more landings that are not risky However, even if the number of risky landings is infrequent, they are still very important to evaluate. The percentage of risky landings (7.3%) are less than the long landings (12%) but as their name suggests these flights are very risky.
+
+
+```{r step9-3, results='hide', warning = FALSE}
+#model for no-pasg
+modelNoPasgR <- glm(FAA$riskyLanding ~ FAA$no_pasg, family = binomial)
+summary(modelNoPasgR)
+
+#model for speed on ground
+modelSpeedOnGroundR <- glm(FAA$riskyLanding ~ FAA$speed_ground, family = binomial)
+summary(modelSpeedOnGroundR)
+
+#model for speed in air
+modelSpeedInAirR <- glm(FAA$riskyLanding ~ FAA$speed_air, family = binomial)
+summary(modelSpeedInAirR)
+
+#model for height
+modelHeightR <- glm(FAA$riskyLanding ~ FAA$height,family = binomial)
+summary(modelHeightR)
+
+#model for pitch
+modelPitchR <- glm(FAA$riskyLanding ~ FAA$pitch, family = binomial)
+summary(modelPitchR)
+
+#model for aircraft
+dummy <- as.numeric(FAA$aircraft == "airbus", 0, 1)
+
+modelAircraftR <- lm(FAA$riskyLanding ~ dummy, data = FAA)
+summary(modelAircraftR)
+```
+
+
+```{r step9-3 sample, warning = FALSE}
+#model for duration
+modelDurationR <- lm(FAA$riskyLanding ~ duration, data = FAA)
+summary(modelDurationR)
+#Sample output for all variables 
+```
+
+Calculating the odds ratio
+```{r step9-3 logRatio, results='hide', warning = FALSE}
+#calculating the odds ratio
+exp(modelNoPasgR$coefficients)
+exp(modelSpeedOnGroundR$coefficients)
+exp(modelSpeedInAirR$coefficients)
+exp(modelHeightR$coefficients)
+exp(modelPitchR$coefficients)
+exp(modelDurationR$coefficients)
+exp(modelAircraftR$coefficients)
+```
+
+```{r step 9-3 logRatio sample, warning = FALSE}
+exp(modelAircraftR$coefficients)
+#Sample output for all variables 
+```
+
+**Table that Ranks the factors from most important to the least**
+
+Table 5. 
+
+| Rank | Variable | Regression Coefficient | Odd Ratio | Direction of Regression Coefficient | p-value |
+|:----:|:--------:|:----------------------:|:---------:|:-----------------------------------:|:-------:|
+| 1 | Speed On Ground | 0.6142 | 1.848212 | + | 6.9e-08 |
+| 2 | Speed In Air | 0.8704 | 2.387870 | + | 3.73e-06 |
+| 3 | Aircraft | -0.06573 | 0.9363796 | - | 0.00028 |
+| 4 | Pitch | 0.3711 | 1.44928737 | + | 0.143296 |
+| 5 | Number of Passengers | -0.02538 | 0.9749400 | - | 0.154 |
+| 6 | Duration | -0.0000813 | 0.9999187 | - | 0.68062  |
+| 7 | Height | -0.002219 | 0.99778385 | - | 0.871 |
+
+**Conclusion:** From the information above it appears that speed on ground is the most important factor in having a long landing. Followed by Speed In Air and Aircraft, with the rest not looking significant. 
+
+
+```{r step9-4 speed_ground, message=FALSE, warning = FALSE}
+plot(jitter(riskyLanding,0.1)~jitter(speed_ground), FAA, xlab="Speed On Ground", ylab = "Risky Landing", pch = ".")
+
+ggplot(FAA, aes(x = speed_ground, fill = riskyLanding)) + geom_histogram(position = "dodge",binwidth = 1) +
+  facet_grid(~riskyLanding)
+```
+
+**Observations:** From the above graphs for 'Speed On Ground' you can see that there is a pattern between Risky Landing and Speed on Ground. Most of the flights that had risky landings were going at a faster speed on ground than their counterparts. Also, the distribution of speed on ground is normal. 
+
+
+```{r step9-4 speed_air, message=FALSE, warning = FALSE}
+plot(jitter(riskyLanding, 0.1)~jitter(speed_air), FAA, xlab = "Speed In Air", ylab = "Risky Landing", pch = ".")
+
+ggplot(FAA, aes(x = speed_air, fill = riskyLanding)) + geom_histogram(position = "dodge",binwidth = 1) +
+  facet_grid(~riskyLanding)
+```
+
+**Observations:** You can see that there is a pattern between Risky Landing and Speed in Air. Most of the flights that had risky landings were going at a faster speed on ground than their counterparts, however there still are some flights that are going slower that are still going over the runway. Also, the distribution of speed on ground is realatively normal. 
+
+
+```{r step9-4 aircraft, message=FALSE, warning = FALSE}
+plot(jitter(riskyLanding, 0.1)~jitter(dummy), FAA, xlab = "Aircraft", ylab = "Risky Landing", pch = ".")
+
+ggplot(FAA, aes(x = riskyLanding, fill = aircraft)) +
+  geom_bar(position = "dodge", width = 0.5) +
+  facet_grid(~aircraft)
+```
+
+**Observations: **You can see that there are more flights that have risky landings in the Boeing aircrafts than Airbus. 
+
+
+```{r step9-4 pitch, message=FALSE, warning = FALSE}
+plot(jitter(riskyLanding, 0.1)~jitter(pitch), FAA, xlab = "Pitch", ylab = "Risky Landing", pch = ".")
+
+ggplot(FAA,aes(x=pitch,fill =  riskyLanding))+geom_histogram(position="dodge",binwidth=0.5) +
+  facet_grid(~riskyLanding)
+```
+
+**Observations: **You can see that the distribution is normal, and that most landings happen at a pitch of 4 regardless if they are risky or not.
+
+
+```{r step9-5 full model, message=FALSE, warning = FALSE}
+#finding the model for risky
+proposedModelRisky <- glm(riskyLanding ~ speed_ground + aircraft, data = FAA, family = binomial(link = "logit"))
+summary(proposedModelRisky)
+exp(coef(proposedModelRisky))
+```
+
+```{r step9-empy and full, message= FALSE, warning = FALSE, results = 'hide'}
+#these steps performed for something late in the code
+fullFAA_omitNA <- na.omit(FAA)
+fullModelRisky <- glm(riskyLanding ~ aircraft + no_pasg + speed_ground + speed_air + 
+                        height + pitch + duration, data = fullFAA_omitNA, family = binomial(link = "logit"))
+summary(fullModelRisky)
+
+emptyModel <- glm(longLanding ~ 1, data = fullFAA_omitNA, family = binomial(link = "logit"))
+summary(emptyModel)
+
+```
+
+**Conclusions:** Because the variables speed in air and speed on ground are highly correlated to each other, one can and should be eliminated. If you run models with the two variables on their own and then together, you see that the speed in air variable does not change much at all. Where the speed on ground variable does change. Because of this, I am going to proceed with speed on ground instead of speed in air. Also because there are many missing observations for speed in air, so preceeding with that variable could mess with the model inapropriately. I am picking speed on ground for the risky landing model, same as the long landings. 
+
+
+```{r step9-6 AICStepModel, message=FALSE, warning=FALSE}
+stepAICModel <- step(proposedModelRisky, trace = 0)
+stepAICModel
+```
+
+**Conclusions:** My best model using the Step AIC function includes variables Aircraft and Speed in Air. This matches what I predicted from step 3.
+
+
+```{r step9-7 BICStepModel, message=FALSE, warning=FALSE}
+stepBICModel <- step(fullModelRisky, k = log(195), trace = 0)
+stepBICModel
+exp(coef(stepBICModel))
+```
+
+**Conclusions:** My best model using the Step BIC function includes variables Aircraft and Speed on Ground. This also matches what I predicted from step 3. They also match each other, the AIC and BIC selection tool get the same model. Which is great! Indicates this model is a good fit.
+
+
+### Step 10
+
+The two major risk factors for Risky landings are the Speed In Air and the make of the aircraft. If you can focus on these two variables, potentially many unsafe landings can be avoided. 
+
+**My Model:** RiskyLanding = speed_ground + aircraft
+
+This is backed up by a combination of valuable information:  
+1. About 7.3% of all flights are considered "Risky" landings, that is a landing that goes over 3000 feet, this is a very high percentage. 
+2. The significance of each variable on Risky Landing is significant, shown in the table below.  
+3. The following visualization of the speed on ground variable, you can see the aircrafts that are traveling at a higher speed on ground have more risky landing distances.  
+4. I am choosing to leave pitch out of the model, as the BIC and AIC step forward variable selection did not include it, and it is not significant if it is included in the model. 
+
+
+| Rank | Variable | Regression Coefficient | Odd Ratio | Direction of Regression Coefficient | p-value |
+|:----:|:--------:|:----------------------:|:---------:|:-----------------------------------:|:-------:|
+| 1 | Speed On Ground | 0.9263 | 2.525084 | + | 3.78e-05 |
+| 2 | Aircraft | 4.0190 | 55.64717 | + | 0.0013 |
+
+```{r step10 speed_air visual, warning = FALSE, message=FALSE, echo=FALSE }
+ggplot(FAA, aes(x = speed_ground, fill = riskyLanding)) + geom_histogram(position = "dodge",binwidth = 1) +
+  facet_grid(~riskyLanding)
+```
+
+
+## Compare the Two Models Built for Long Landing and Risky Landing
+
+
+### Step 11
+
+The similarities and differences are summarized below:
+The two models are similar, however the Risky Landings drop the variable pitch as factors impacting risky landing. This could mean that pitch is important in predicting a long landing, but not necessarily a risky one. 
+
+Speed on ground for risky flights has a larger odds ratio, meaning that for the risky flights if the speed on the ground increases by 1 mph, then the flight is 2.5 more likely to have a risky landing than a regular landing. Compared to the long landings which has an odds ratio of 1.8, which still large, just not as big of an impact as the risky landing. 
+
+The difference in the odds ratio makes sense also, because if the speed on the ground goes up by 1mph then the risky landing is impacted by 2.5, vs the long landing of 1.8. When speed goes up then the changes of having a risky landing are higher. 
+
+
+### Step 12
+
+```{r step12, warning = FALSE, message=FALSE}
+#ROC for Long model
+linPred <- predict(proposedModelLong)
+predProb <- predict(proposedModelLong, type = "response")
+predOut <- ifelse(predProb < 0.05, "no", "yes")
+fullFAA_omitNA <- data.frame(FAA, predProb, predOut)
+xtabs(~longLanding+predOut, FAA)
+
+thresh<-seq(0.01,0.5,0.01)
+sensitivity<-specificity<-rep(NA,length(thresh))
+for(j in seq(along=thresh)){
+  pp<-ifelse(fullFAA_omitNA$predProb<thresh[j],"no","yes")
+  xx<-xtabs(~longLanding+pp,fullFAA_omitNA)
+  specificity[j]<-xx[1,1]/(xx[1,1]+xx[1,2])
+  sensitivity[j]<-xx[2,2]/(xx[2,1]+xx[2,2])
+}
+
+#ROC for Risky Model
+linPredR <- predict(proposedModelRisky)
+predProbR <- predict(proposedModelRisky, type = "response")
+predOutR <- ifelse(predProbR < 0.05, "no", "yes")
+fullFAA_omitNA <- data.frame(FAA, predProbR, predOutR)
+xtabs(~riskyLanding + predOutR, FAA)
+
+thresh<-seq(0.01,0.5,0.01)
+sensitivity1<-specificity1<-rep(NA,length(thresh))
+for(j in seq(along=thresh)){
+  pp<-ifelse(fullFAA_omitNA$predProbR<thresh[j],"no","yes")
+  xx<-xtabs(~riskyLanding+pp,fullFAA_omitNA)
+  specificity1[j]<-xx[1,1]/(xx[1,1]+xx[1,2])
+  sensitivity1[j]<-xx[2,2]/(xx[2,1]+xx[2,2])
+}
+
+#plot both together 
+plot(1-specificity,sensitivity,type="l", col = "red", xlab = "1-specificity", ylab = "sensitivity")
+par(new = TRUE)
+plot(1-specificity1,sensitivity1,type="l", xlab = " ", ylab = " ")
+```
+
+**Conclusion:** In the above figure, the red line is the performance of the long landing model, and the black is the performance of the risky landing model. The performance of both are very similar with the area under curve. However, I would say the performance of the long landing model is slightly better, which makes sense because the long landing model encompases the risky landings as well. They both do look pretty good though, which is great. 
+
+
+### Step 13
+We will now use our models to predict the landings of this new flight that is coming in to land at an airport. The following line has the data for the new flight.
+
+```{r step13, warning = FALSE, message=FALSE}
+#new flight with new information
+newFlight <- data.frame(aircraft = "boeing", duration = 200, no_pasg = 80, speed_ground = 115, speed_air = 120, height = 40, pitch = 4)
+
+#predicting if the model will be a long landing
+predictModelLong <- predict(proposedModelLong, newdata = newFlight, type = 'response' , se = T)
+c(predictModelLong$fit, predictModelLong$fit-1.96*predictModelLong$se.fit[1], predictModelLong$fit+1.96*predictModelLong$se.fit[1])
+
+
+#predicting if the model will be a risky landing
+predictModelRisky <- predict(proposedModelRisky, newdata = newFlight, type = "response", se = TRUE)
+c(predictModelRisky$fit, predictModelRisky$fit-1.96*predictModelRisky$se.fit[1], predictModelRisky$fit+1.96*predictModelRisky$se.fit[1])
+
+```
+
+**Conclusion:** Now that we have models that are performing well, we can use a new flight with data to predict whether it will be long or risky. The new flight has a probabillity of 0.9999577 of being a long landing, at a 95% confidence interval of (0.9998236, 1.0000917). The new flight has a probability of 0.999789 of being a risky landing, at a 95% confidence interval of (0.998925, 1.000653). The model indicates it has a very high probability of landing long and risky. This is consistent with what is expected, however this is incredibly high, and nothing should have a prediction over 1.0. 
+
+
+## Compare models with different link functions
+
+### Step 14
+
+We now will look at our risky landing model with the three different linkers, logit, probit, and cLogLog. to evaluate which has the best performance, evaluated with the AIC score. 
+
+```{r step14, warning = FALSE, message=FALSE, results='hide'}
+ModelRiskyLogit <- glm(riskyLanding ~ speed_ground + aircraft, data = FAA, family = binomial(link = "logit"))
+
+ModelRiskyProbit <- glm(riskyLanding ~ speed_ground + aircraft, data = FAA, family = binomial(link = probit))
+
+ModelRiskyLogLog <- glm(riskyLanding ~ speed_ground + aircraft, data = FAA, family = binomial(link = cloglog))
+
+round(coef(ModelRiskyLogit),3)
+round(coef(ModelRiskyProbit),3)
+round(coef(ModelRiskyLogLog),3)
+
+summary(ModelRiskyLogit)
+summary(ModelRiskyProbit)
+summary(ModelRiskyLogLog)
+
+
+```
+
+**Conclusion:** Given the results in the table below, especially the AIC values, the best link to use would be the Probit linker, because it results in the lowest AIC value. However, all three are incredibly close. All three models are good to pick, in reality the different linkers do not make a huge difference. 
+
+|  | Logit Model | Probit | cLogLog |
+  |:--------:|:--------:|:---------:|:---:|
+  | Aircraft Est  | 4.019 | 2.357 | 2.898 |
+  | Speed Ground Est | 0.926 | 0.532 | 0.622 |
+  | AIC | 46.097 | 45.436 | 47.443 |
+
+### Step 15
+
+```{r step15, warning = FALSE, message=FALSE}
+#logit model
+thresh <- seq(0.01,0.5,0.01)
+sensitivity_r <- specificity_r <- rep(NA,length(thresh))
+for( j in seq(along=thresh)) {
+  pp<- ifelse(predict(ModelRiskyLogit,type = 'response') < thresh[j],0,1)
+  xx<-xtabs(~FAA$riskyLanding+pp)
+  specificity_r[j]<-xx[1,1]/(xx[1,1]+xx[1,2])
+  sensitivity_r[j]<-xx[2,2]/(xx[2,1]+xx[2,2])
+}
+#probit model
+thresh <- seq(0.01,0.5,0.01)
+sensitivity_probit <- specificity_probit <- rep(NA,length(thresh))
+for( j in seq(along=thresh)) {
+  pp<- ifelse(predict(ModelRiskyProbit,type = 'response') < thresh[j],0,1)
+  xx<-xtabs(~FAA$riskyLanding+pp)
+  specificity_probit[j]<-xx[1,1]/(xx[1,1]+xx[1,2])
+  sensitivity_probit[j]<-xx[2,2]/(xx[2,1]+xx[2,2])
+}
+#cloglog model
+thresh <- seq(0.01,0.5,0.01)
+sensitivity_loglog <- specificity_loglog <- rep(NA,length(thresh))
+for( j in seq(along=thresh)) {
+  pp<- ifelse(predict(ModelRiskyLogLog,type = 'response') < thresh[j],0,1)
+  xx<-xtabs(~FAA$riskyLanding+pp)
+  specificity_loglog[j]<-xx[1,1]/(xx[1,1]+xx[1,2])
+  sensitivity_loglog[j]<-xx[2,2]/(xx[2,1]+xx[2,2])
+}
+
+#plotting all three together
+plot(1 - specificity_r, sensitivity_r, type = "l", col = "black", xlab = " ", ylab = "sensitivity")
+par(new = TRUE)
+plot(1 - specificity_probit, sensitivity_probit, type = "l", col = "red", xlab = " ", ylab = " ")
+par(new = TRUE)
+plot(1 - specificity_loglog, sensitivity_loglog, type = "l", col = "green", xlab = "1-specificity", ylab = " ")
+
+```
+
+**Conclusion:** In the figure above, the black curve is the logit linker, red is probit, and green is the cLogLog linker. The ROC curves show the performance of the three models is very similar. The AUC looks to be the same in all three model linkers. 
+
+
+### Step 16 
+
+We will use the below code to identify the top 5 risky landings in each model. 
+
+```{r step 16, warning = FALSE, message=FALSE, results= 'hide'}
+predRiskyLogit <- predict(ModelRiskyLogit,type = 'response')
+predRiskyProbit <- predict(ModelRiskyProbit,type = 'response')
+predRiskyLoglog <- predict(ModelRiskyLogLog,type = 'response')
+
+#sort by tail, so you get the obs with high risk
+FAA[as.numeric(names(tail(sort(predRiskyLogit),5))),]
+FAA[as.numeric(names(tail(sort(predRiskyProbit),5))),]
+FAA[as.numeric(names(tail(sort(predRiskyLoglog),5))),]
+
+```
+
+**Conclusion:** Probit and cLogLog have the most similar risky landings. Probits top 5 risky landings are: 675, 772, 773, 784, 814 and cLogLog is: 760, 772, 773, 784, and 814. These two have all the same top flights, except for their first one. However, the logit linker gives much different flights as being the most risky. Their flights are 227, 675, 814, 773, 513, there are a few similar, but not as much similarity as the other two. These flights could be used to improve the models as flights that would be extremely risky, and good flights for FAA agents to be on the lookout for. 
+
+
+### Step 17 
+
+```{r step 17, warning=FALSE, message=FALSE, results='hide'}
+#make new models with linkers in variable name to not get confused
+proposedModelRiskyLogit <- glm(riskyLanding ~ speed_ground + aircraft, data = FAA, family = binomial(link = "logit"))
+summary(proposedModelRiskyLogit)
+
+proposedModelRiskyProbit <- glm(riskyLanding ~ speed_ground + aircraft, data = FAA, family = binomial(link = "probit"))
+
+proposedModelRiskyCLoglog <- glm(riskyLanding ~ speed_ground + aircraft, data = FAA, family = binomial(link = "cloglog"))
+```
+
+```{r step 17 predictions, warning=FALSE, message=FALSE}
+
+#straight from notes in class
+predLogitRisky <- predict(proposedModelRiskyLogit, newdata = newFlight, type = 'response', se.fit = T)
+c(predLogitRisky$fit, predLogitRisky$fit - 1.96 * predLogitRisky$se.fit[1], predLogitRisky$fit + 1.96 * predLogitRisky$se.fit[1])
+
+predProbitRisky <- predict(proposedModelRiskyProbit, newdata = newFlight, type = 'response', se.fit = T)
+c(predProbitRisky$fit, predProbitRisky$fit - 1.96 * predProbitRisky$se.fit[1], predProbitRisky$fit + 1.96 * predProbitRisky$se.fit[1])
+
+predCLoglogRisky <- predict(proposedModelRiskyCLoglog, newdata = newFlight, type = 'response', se.fit = T)
+c(predCLoglogRisky$fit, predCLoglogRisky$fit - 1.96 * predCLoglogRisky$se.fit[1], predCLoglogRisky$fit + 1.96 * predCLoglogRisky$se.fit[1])
+```
+
+**Conclusion:** The different linkers performance is also very similar at predicting a risky landing. The logit linker can predict a risky flight landing at a probabillity of 0.9999577, at a 95% confidence interval of (0.9998236, 1.0000917). The probit linker predicts a risky landing at a probability of 0.9999994, at a 95% cofidence interval of (0.9999933, 1.0000056), and the hazard linker (cLogLog) predicts a risky landing at a probability of 1, at a 95% cofidence interval of (1,1). All three linkers can predict at a very high probability which indicates that perhaps all three models, irrespective of the linker used, are overfit to the data. This could have potentially been avoided by using a training set of data and a testing set, instead of building the model on 100% of the data. 
+
+
+
+
